@@ -12,6 +12,7 @@ const passportLocalMongoose = require("passport-local-mongoose");
 const findOrCreate = require("mongoose-findorcreate");
 const LocalStrategy=require("passport-local").Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const FacebookStrategy = require('passport-facebook').Strategy;
 
 
 
@@ -92,21 +93,56 @@ passport.deserializeUser(function(id, done) {
 });
 
 passport.use(new GoogleStrategy({
-    clientID: process.env.CLIENT_ID,
-    clientSecret:process.env.CLIENT_SECRET,
-    callbackURL: "http://localhost:3000/auth/google/secrets", 
-    userProfileURL: "https://www.googleapis.com//oauth2/v3/userinfo"
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: 'http://localhost:3000/auth/google/secrets'
   },
-  (accessToken, refreshToken, profile, cb)=>{
-    console.log(profile);
-    User.findOrCreate({ googleId: profile.id }, (err, user) =>{
-      return cb(err, user);
-    });
-    
+  async function (accessToken, refreshToken, profile, done) {
+    try {
+      console.log(profile);
+      // Find or create user in your database
+      let user = await User.findOne({ googleId: profile.id });
+      if (!user) {
+        // Create new user in database
+        const username = Array.isArray(profile.emails) && profile.emails.length > 0 ? profile.emails[0].value.split('@')[0] : '';
+        const newUser = new User({
+          username: profile.displayName,
+          googleId: profile.id
+        });
+        user = await newUser.save();
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
   }
 ));
 
   
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_CLIEND_ID,
+    clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+    callbackURL: 'http://localhost:3000/auth/facebook/secrets'
+  },
+  async function (accessToken, refreshToken, profile, done) {
+    try {
+      console.log(profile);
+      // Find or create user in your database
+      let user = await User.findOne({ facebookId: profile.id });
+      if (!user) {
+        // Create new user in database
+        const newUser = new User({
+          username: profile.displayName,
+          facebookId: profile.id
+        });
+        user = await newUser.save();
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }
+));
 
 
 
@@ -123,6 +159,16 @@ app.get('/auth/google/secrets',
   function(req, res) {
     // Successful authentication, redirect home.
     res.redirect("/secrets");
+  });
+
+app.get('/auth/facebook',
+  passport.authenticate('facebook'));
+
+app.get('/auth/facebook/secrets',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  function (req, res) {
+    // Successful authentication, redirect to secrets page.
+    res.redirect('/secrets');
   });
 
 
